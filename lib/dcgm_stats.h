@@ -15,8 +15,13 @@ struct DCGMConstants
 {
     static constexpr auto ServiceName{"dcgmi"};
     static constexpr auto dcgmiPath{"/usr/bin/dcgmi"};
-    static constexpr auto dcgmiArgs{"dmon -e 155,1001,1002,1003,1004,1005,1007,1008,1009,1010,1011,1012,"};
+    static constexpr auto dcgmiArgs{"dmon -c 1 -e 150,155,1001,1002,1003,1004,1005,1007,1008,1009,1010,1011,1012"};
     static constexpr auto ConsecutiveFailureThreshold{5};
+    static constexpr auto ExpectedCountOfTokens{15};
+    static constexpr auto ExpectedCountOfProfileValues{13};
+    static constexpr auto DataStartLine{2};
+    static constexpr auto DataStartToken{2};
+    static constexpr auto GPUIdTokenIndex{1};
 };
 
 namespace detail 
@@ -48,7 +53,6 @@ template <typename Reg = atlasagent::TaggingRegistry>
 class GpuMetricsDCGM
 {
 public:
-
     GpuMetricsDCGM(Reg* registry) : registry_{registry} {};
     ~GpuMetricsDCGM() {};
 
@@ -60,8 +64,7 @@ public:
     bool GatherMetrics();
 
 private:
-    void UpdateMetrics(std::map<int, std::vector<double>> &dataMap);
-
+    bool UpdateMetrics(std::map<int, std::vector<double>> &dataMap);
     Reg* registry_;
 };
 

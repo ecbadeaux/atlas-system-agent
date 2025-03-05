@@ -6,6 +6,9 @@
 #include <iostream>
 #include "util.h"
 
+template class GpuMetricsDCGM<atlasagent::TaggingRegistry>;
+template class GpuMetricsDCGM<spectator::TestRegistry>;
+
 bool IsServiceRunning(const char* serviceName)
 {
     std::string command = "systemctl is-active --quiet " + std::string(serviceName);
@@ -13,31 +16,27 @@ bool IsServiceRunning(const char* serviceName)
     return returnCode == 0;
 }
 
-void printTokens(std::vector<std::string> tokens)
-{
-    for (unsigned int i = 0; i < tokens.size(); i++)
-    {
-        std::cout << tokens.at(i) << " ";
-    }
-    std::cout << std::endl;
-}
-
 bool ParseLines(const std::vector<std::string> &lines, std::map<int, std::vector<double>> &dataMap) try
 {   
-    for (unsigned int i = 2; i < lines.size(); i++)
+    for (unsigned int i = DCGMConstants::DataStartLine; i < lines.size(); i++)
     {
         auto line = lines.at(i);
         std::vector<std::string> tokens = absl::StrSplit(line, ' ', absl::SkipWhitespace());
 
-        printTokens(tokens);
-
-        
-        int gpuId = std::stoi(tokens[1]);
-        std::cout << "GpuID:" << gpuId << std::endl;
-        for (unsigned int j = 2; j < tokens.size(); j++)
+        if (tokens.size() != DCGMConstants::ExpectedCountOfTokens)
         {
-            std::cout << "CurrentToken:" << tokens[j] << std::endl;
+            return false;
+        }
+        
+        auto gpuId = std::stoi(tokens.at(DCGMConstants::GPUIdTokenIndex));
+        for (unsigned int j = DCGMConstants::DataStartToken; j < tokens.size(); j++)
+        {
             dataMap[gpuId].push_back(std::stod(tokens[j]));
+        }
+
+        if (dataMap[gpuId].size() != DCGMConstants::ExpectedCountOfProfileValues)
+        {
+            return false;
         }
     }
     return true;
@@ -88,9 +87,12 @@ inline std::vector<std::string> ExecuteDCGMI()
 }
 
 template <class Reg>
-void GpuMetricsDCGM<Reg>::UpdateMetrics(std::map<int, std::vector<double>> &dataMap)
+bool GpuMetricsDCGM<Reg>::UpdateMetrics(std::map<int, std::vector<double>> &dataMap)
 {
-
+    if (this->registry_ == nullptr)
+    {
+        return false;
+    }
     for (const auto& [gpuId, data] : dataMap) 
     {
 
@@ -145,12 +147,14 @@ void GpuMetricsDCGM<Reg>::UpdateMetrics(std::map<int, std::vector<double>> &data
             }
         }
     }
+    return true;
 }
 
 template<class Reg>
 bool GpuMetricsDCGM<Reg>::GatherMetrics()
 {
     auto lines = ExecuteDCGMI();
+
     std::map<int, std::vector<double>> dataMap;
 
     if (false == ParseLines(lines, dataMap))
@@ -160,9 +164,10 @@ bool GpuMetricsDCGM<Reg>::GatherMetrics()
 
     PrintDataMap(dataMap);
 
-    UpdateMetrics(dataMap);
+    if (false == UpdateMetrics(dataMap))
+    {
+        return false;
+    }
 
     return true;
 }
-
-template class GpuMetricsDCGM<atlasagent::TaggingRegistry>;
