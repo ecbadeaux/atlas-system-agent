@@ -6,6 +6,13 @@
 #include <iostream>
 #include "util.h"
 
+bool IsServiceRunning(const char* serviceName)
+{
+    std::string command = "systemctl is-active --quiet " + std::string(serviceName);
+    int returnCode = system(command.c_str());
+    return returnCode == 0;
+}
+
 void printTokens(std::vector<std::string> tokens)
 {
     for (unsigned int i = 0; i < tokens.size(); i++)
@@ -17,7 +24,6 @@ void printTokens(std::vector<std::string> tokens)
 
 bool ParseLines(const std::vector<std::string> &lines, std::map<int, std::vector<double>> &dataMap) try
 {   
-    std::cout << "TokensCheck" << std::endl;
     for (unsigned int i = 2; i < lines.size(); i++)
     {
         auto line = lines.at(i);
@@ -25,11 +31,7 @@ bool ParseLines(const std::vector<std::string> &lines, std::map<int, std::vector
 
         printTokens(tokens);
 
-        // if (tokens.size() != 5)
-        // {
-        //     atlasagent::Logger()->error("CSV data not in valid form");
-        //     return false;
-        // }
+        
         int gpuId = std::stoi(tokens[1]);
         std::cout << "GpuID:" << gpuId << std::endl;
         for (unsigned int j = 2; j < tokens.size(); j++)
@@ -79,54 +81,63 @@ void PrintDataMap(const std::map<int, std::vector<double>> &dataMap)
     //std::cout.rdbuf(orig_cout_stream);
 }
 
-void DCGMExecutor<Reg>::UpdateMetrics(std::map<int, std::vector<DataLine>> &dataMap)
+inline std::vector<std::string> ExecuteDCGMI()
 {
-    for (const auto& [gpuId, dataLines] : dataMap) 
+    static const auto command = std::string(DCGMConstants::dcgmiPath) + " " + std::string(DCGMConstants::dcgmiArgs);
+    return atlasagent::read_output_lines(command.data(), 5000);
+}
+
+template <class Reg>
+void GpuMetricsDCGM<Reg>::UpdateMetrics(std::map<int, std::vector<double>> &dataMap)
+{
+
+    for (const auto& [gpuId, data] : dataMap) 
     {
 
         std::cout << "Updating Registry Metrics for GPU ID: " << gpuId << std::endl;
-        for (const auto& dataLine : dataLines)
+        for (unsigned int i = 0; i < data.size(); i++)
         {
-            switch (dataLine.fieldId)
+            double value = data.at(i);
+            switch (i)
             {
             case 0:
-                detail::gauge(registry_, "gpu.dcgm.powerUsage", gpuId)->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.deviceTemp", gpuId)->Set(value);
                 break;
             case 1:
-                detail::gauge(registry_, "gpu.dcgm.deviceTemp", gpuId)->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.powerUsage", gpuId)->Set(value);
                 break;
             case 2:
-                detail::gauge(registry_, "gpu.dcgm.sm", gpuId, "activity")->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.graphicsEngineActivity", gpuId)->Set(value);
                 break;
             case 3:
-                detail::gauge(registry_, "gpu.dcgm.sm", gpuId, "occupancy")->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.sm", gpuId, "activity")->Set(value);
                 break;
             case 4:
-                detail::gauge(registry_, "gpu.dcgm.tensorCoresUtilization", gpuId)->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.sm", gpuId, "occupancy")->Set(value);
                 break;
             case 5:
-                detail::gauge(registry_, "gpu.dcgm.memoryBandwidthUtilization", gpuId)->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.tensorCoresUtilization", gpuId)->Set(value);
                 break;
             case 6:
-                detail::gauge(registry_, "gpu.dcgm.pipeUtilization", gpuId, "fp32")->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.memoryBandwidthUtilization", gpuId)->Set(value);
                 break;
             case 7:
-                detail::gauge(registry_, "gpu.dcgm.pipeUtilization", gpuId, "fp16")->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.pipeUtilization", gpuId, "fp32")->Set(value);
                 break;
             case 8:
-                detail::counter(registry_, "gpu.dcgm.pcie.bytes", gpuId, "out")->Set(dataLine.value);
+                detail::gauge(registry_, "gpu.dcgm.pipeUtilization", gpuId, "fp16")->Set(value);
                 break;
             case 9:
-                detail::counter(registry_, "gpu.dcgm.pcie.bytes", gpuId, "in")->Set(dataLine.value);
+                detail::counter(registry_, "gpu.dcgm.pcie.bytes", gpuId, "out")->Set(value);
                 break;
             case 10:
-                detail::counter(registry_, "gpu.dcgm.nvlink.bytes", gpuId, "in")->Set(dataLine.value);
+                detail::counter(registry_, "gpu.dcgm.pcie.bytes", gpuId, "in")->Set(value);
                 break;
             case 11:
-                detail::counter(registry_, "gpu.dcgm.nvlink.bytes", gpuId, "out")->Set(dataLine.value);
+                detail::counter(registry_, "gpu.dcgm.nvlink.bytes", gpuId, "out")->Set(value);
                 break;
             case 12:
-                detail::gauge(registry_, "gpu.dcgm.graphicsEngineActivity", gpuId)->Set(dataLine.value);
+                detail::counter(registry_, "gpu.dcgm.nvlink.bytes", gpuId, "in")->Set(value);
                 break;
             default:
                 std::cout << "Error Unknown field type.";
@@ -136,28 +147,22 @@ void DCGMExecutor<Reg>::UpdateMetrics(std::map<int, std::vector<DataLine>> &data
     }
 }
 
-void GpuMetricsDCGM::Driver()
+template<class Reg>
+bool GpuMetricsDCGM<Reg>::GatherMetrics()
 {
-
-    // Path to the binary in your CMake build folder
-    const char* binaryPath = "/usr/bin/dcgmi dmon -e 1001,1002,1003,1004,1005,1007,1008,1009,1010,1011,1012 -c 1";
-
-    auto lines = atlasagent::read_output_lines(binaryPath, 50000);
-
-    std::cout << "Lines Check" <<std::endl;
-    std::cout << "Lines Size" << lines.size() << std::endl;
-    for(unsigned int i = 0; i < lines.size(); i++)
-    {
-        std::cout << lines[i] << std::endl;
-    }
-
+    auto lines = ExecuteDCGMI();
     std::map<int, std::vector<double>> dataMap;
 
-    ParseLines(lines, dataMap);
-
-    std::cout << "MapCheck" << std::endl;
+    if (false == ParseLines(lines, dataMap))
+    {
+        return false;
+    }
 
     PrintDataMap(dataMap);
 
-    return;
+    UpdateMetrics(dataMap);
+
+    return true;
 }
+
+template class GpuMetricsDCGM<atlasagent::TaggingRegistry>;

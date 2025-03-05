@@ -1,5 +1,6 @@
-#include "dcgm_agent.h"
-#include "dcgm_structs.h"
+#include "tagging_registry.h"
+#include "spectator/registry.h"
+
 #include "string.h"
 #include "unistd.h"
 #include <iostream>
@@ -10,16 +11,12 @@
 #include <optional>
 #include <array>
 
-enum class ErrorCode
+struct DCGMConstants
 {
-    SUCCESS = 0,
-    INITIALIZATION_FAILED = 1,
-    EMBEDDED_MODE_FAILED_TO_START = 2,
-    FAILED_TO_GATHER_NUMBER_OF_DEVICES = 3,
-    FAILED_TO_CREATE_FIELD_GROUP = 4,
-    FAILED_TO_WATCH_FIELDS = 5,
-    FAILED_TO_GET_LATEST_VALUES = 6,
-    NO_DEVICES_TO_PROFILE = 7,
+    static constexpr auto ServiceName{"dcgmi"};
+    static constexpr auto dcgmiPath{"/usr/bin/dcgmi"};
+    static constexpr auto dcgmiArgs{"dmon -e 155,1001,1002,1003,1004,1005,1007,1008,1009,1010,1011,1012,"};
+    static constexpr auto ConsecutiveFailureThreshold{5};
 };
 
 namespace detail 
@@ -50,28 +47,9 @@ namespace detail
 template <typename Reg = atlasagent::TaggingRegistry>
 class GpuMetricsDCGM
 {
-private:
-    Reg* registry_;
-
-    static constexpr std::array<unsigned short, 13> fieldIds{
-        155,
-        150,
-        1001,
-        1002,
-        1003,
-        1004,
-        1005,
-        1007,
-        1008,
-        1009,
-        1010,
-        1011,
-        1012,
-    };
-
 public:
-    GpuMetricsDCGM(Reg* registry) : registry_{registry} {};
 
+    GpuMetricsDCGM(Reg* registry) : registry_{registry} {};
     ~GpuMetricsDCGM() {};
 
     // Abide by the C++ rule of 5
@@ -79,6 +57,12 @@ public:
     GpuMetricsDCGM &operator=(const GpuMetricsDCGM &other) = delete;
     GpuMetricsDCGM(GpuMetricsDCGM &&other) noexcept = delete;
     GpuMetricsDCGM &operator=(GpuMetricsDCGM &&other) noexcept = delete;
+    bool GatherMetrics();
 
-    void Driver();
+private:
+    void UpdateMetrics(std::map<int, std::vector<double>> &dataMap);
+
+    Reg* registry_;
 };
+
+bool IsServiceRunning(const char* serviceName);

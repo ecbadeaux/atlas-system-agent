@@ -19,6 +19,8 @@
 #include <getopt.h>
 #include <random>
 
+#include "../lib/dcgm_stats.h"
+
 using atlasagent::GetLogger;
 using atlasagent::Logger;
 using atlasagent::Nvml;
@@ -239,7 +241,10 @@ void collect_system_metrics(TaggingRegistry* registry, std::unique_ptr<atlasagen
   Proc proc{registry, net_tags};
 
   auto gpu = init_gpu(registry, std::move(nvidia_lib));
-
+  
+  GpuMetricsDCGM gpuDCGM(registry);                    
+  unsigned int dcgmConsecutiveFailureCount = 0;
+  
   // initial polling delay, to prevent publishing too close to a minute boundary
   auto delay = initial_polling_delay();
   Logger()->info("Initial polling delay is {}s", delay);
@@ -268,6 +273,12 @@ void collect_system_metrics(TaggingRegistry* registry, std::unique_ptr<atlasagen
       if (gpu) {
         gpu->gpu_metrics();
       }
+
+      if(true == IsServiceRunning(DCGMConstants::ServiceName) && dcgmConsecutiveFailureCount < DCGMConstants::ConsecutiveFailureThreshold)
+      {
+        dcgmConsecutiveFailureCount = (false == gpuDCGM.GatherMetrics()) ? dcgmConsecutiveFailureCount + 1 : 0;
+      }
+
       auto elapsed = duration_cast<milliseconds>(system_clock::now() - start);
       Logger()->info("Published system metrics (delay={})", elapsed);
       next_slow_run += seconds(60);

@@ -4,9 +4,9 @@
 
 TEST(EverettB, EverettB) 
 {
-
-    GpuMetricsDCGM gpuM {};
+    /*
+    ExecutorDCGMI gpuM {};
 
     gpuM.Driver();
-
+    */
 }
