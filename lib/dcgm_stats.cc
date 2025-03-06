@@ -1,24 +1,24 @@
-#include "dcgm_stats.h"
+#include <iostream>
+#include <fstream>
 
 #include "absl/strings/str_split.h"
-
-#include <optional>
-#include <iostream>
+#include "dcgm_stats.h"
 #include "util.h"
+
+using atlasagent::GetLogger;
+using atlasagent::Logger;
 
 template class GpuMetricsDCGM<atlasagent::TaggingRegistry>;
 template class GpuMetricsDCGM<spectator::TestRegistry>;
 
-bool IsServiceRunning(const char* serviceName)
-{
-    std::string command = "systemctl is-active --quiet " + std::string(serviceName);
-    int returnCode = system(command.c_str());
-    return returnCode == 0;
-}
-
 bool ParseLines(const std::vector<std::string> &lines, std::map<int, std::vector<double>> &dataMap) try
 {   
-    for (unsigned int i = DCGMConstants::DataStartLine; i < lines.size(); i++)
+    if (lines.size() < DCGMConstants::RequiredLines)
+    {
+        return false;
+    }
+
+    for (unsigned int i = DCGMConstants::DataStartLineIndex; i < lines.size(); i++)
     {
         auto line = lines.at(i);
         std::vector<std::string> tokens = absl::StrSplit(line, ' ', absl::SkipWhitespace());
@@ -29,7 +29,7 @@ bool ParseLines(const std::vector<std::string> &lines, std::map<int, std::vector
         }
         
         auto gpuId = std::stoi(tokens.at(DCGMConstants::GPUIdTokenIndex));
-        for (unsigned int j = DCGMConstants::DataStartToken; j < tokens.size(); j++)
+        for (unsigned int j = DCGMConstants::DataStartTokenIndex; j < tokens.size(); j++)
         {
             dataMap[gpuId].push_back(std::stod(tokens[j]));
         }
@@ -47,29 +47,29 @@ catch(const std::exception& e)
     return false;
 }
 
-void PrintDataMap(const std::map<int, std::vector<double>> &dataMap)
+/* Debug purpose only will delete */
+bool PrintDataMap(const std::map<int, std::vector<double>> &dataMap)
 {
-
     // Create an ofstream to open the file for output
+    std::ofstream outFile("/opt/output.txt", std::ios::app);
 
-    // std::ofstream outFile("/opt/output.txt", std::ios::app);
-
-    // if (false == outFile.is_open())
-    // {
-    //     std::cout << "Could not open log folder" << std::endl;
-    // }
+    if (false == outFile.is_open())
+    {
+        std::cout << "Could not open log folder" << std::endl;
+        return false;
+    }
 
     // // Save the original standard output stream (optional)
-    // std::streambuf* orig_cout_stream = std::cout.rdbuf();
+    std::streambuf* orig_cout_stream = std::cout.rdbuf();
 
     // // Redirect std::cout to the file
-    // std::cout.rdbuf(outFile.rdbuf());
+    std::cout.rdbuf(outFile.rdbuf());
 
     // Print the result (for debugging or verification)
     for (const auto& [gpuId, dataLines] : dataMap)
     {
         std::cout << "GPU ID: " << gpuId << std::endl;
-        for (const auto& dataLine : dataLines) 
+        for (const auto& dataLine : dataLines)
         {
             std::cout << dataLine << " ";
         }
@@ -77,13 +77,19 @@ void PrintDataMap(const std::map<int, std::vector<double>> &dataMap)
     }
 
     // Restore the original std::cout
-    //std::cout.rdbuf(orig_cout_stream);
+    std::cout.rdbuf(orig_cout_stream);
+    return true;
 }
 
-inline std::vector<std::string> ExecuteDCGMI()
+inline std::vector<std::string> ExecuteDCGMI() try
 {
     static const auto command = std::string(DCGMConstants::dcgmiPath) + " " + std::string(DCGMConstants::dcgmiArgs);
     return atlasagent::read_output_lines(command.data(), 5000);
+}
+catch(const std::exception& e)
+{
+    atlasagent::Logger()->error("Exception thrown in ExecuteDCGMI", e.what());
+    return std::vector<std::string>();
 }
 
 template <class Reg>
@@ -95,8 +101,6 @@ bool GpuMetricsDCGM<Reg>::UpdateMetrics(std::map<int, std::vector<double>> &data
     }
     for (const auto& [gpuId, data] : dataMap) 
     {
-
-        std::cout << "Updating Registry Metrics for GPU ID: " << gpuId << std::endl;
         for (unsigned int i = 0; i < data.size(); i++)
         {
             double value = data.at(i);
@@ -153,19 +157,27 @@ bool GpuMetricsDCGM<Reg>::UpdateMetrics(std::map<int, std::vector<double>> &data
 template<class Reg>
 bool GpuMetricsDCGM<Reg>::GatherMetrics()
 {
+    Logger()->info("Attempting to gather DCGM metrics");
+
     auto lines = ExecuteDCGMI();
 
     std::map<int, std::vector<double>> dataMap;
 
     if (false == ParseLines(lines, dataMap))
     {
+        Logger()->info("Failure to parse DCGMI output");
         return false;
     }
 
-    PrintDataMap(dataMap);
+    if (false == PrintDataMap(dataMap))
+    {
+        Logger()->info("Failure to print data map");
+        return false;
+    }
 
     if (false == UpdateMetrics(dataMap))
     {
+        Logger()->info("Failure to update DCGMI metrics in registry");
         return false;
     }
 

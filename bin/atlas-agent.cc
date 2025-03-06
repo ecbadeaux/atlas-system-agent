@@ -5,6 +5,7 @@
 #include "../lib/aws.h"
 #include "../lib/cgroup.h"
 #include "../lib/cpufreq.h"
+#include "../lib/dcgm_stats.h"
 #include "../lib/disk.h"
 #include "../lib/ethtool.h"
 #include "../lib/gpumetrics.h"
@@ -12,14 +13,13 @@
 #include "../lib/perfmetrics.h"
 #include "../lib/pressure_stall.h"
 #include "../lib/proc.h"
+#include "../lib/util.h"
 #include "backward.hpp"
 #include <condition_variable>
 #include <csignal>
 #include <fmt/chrono.h>
 #include <getopt.h>
 #include <random>
-
-#include "../lib/dcgm_stats.h"
 
 using atlasagent::GetLogger;
 using atlasagent::Logger;
@@ -244,6 +244,10 @@ void collect_system_metrics(TaggingRegistry* registry, std::unique_ptr<atlasagen
   
   GpuMetricsDCGM gpuDCGM(registry);                    
   unsigned int dcgmConsecutiveFailureCount = 0;
+  if(false == atlasagent::IsServiceRunning(DCGMConstants::ServiceName))
+  {
+    Logger()->info("DCGM service '{}' is inactive. Metrics will be collected once it's running.", DCGMConstants::ServiceName);
+  }
   
   // initial polling delay, to prevent publishing too close to a minute boundary
   auto delay = initial_polling_delay();
@@ -274,9 +278,13 @@ void collect_system_metrics(TaggingRegistry* registry, std::unique_ptr<atlasagen
         gpu->gpu_metrics();
       }
 
-      if(true == IsServiceRunning(DCGMConstants::ServiceName) && dcgmConsecutiveFailureCount < DCGMConstants::ConsecutiveFailureThreshold)
+      if(true == atlasagent::IsServiceRunning(DCGMConstants::ServiceName) && dcgmConsecutiveFailureCount < DCGMConstants::ConsecutiveFailureThreshold)
       {
         dcgmConsecutiveFailureCount = (false == gpuDCGM.GatherMetrics()) ? dcgmConsecutiveFailureCount + 1 : 0;
+        if (dcgmConsecutiveFailureCount > DCGMConstants::ConsecutiveFailureThreshold)
+        {
+          Logger()->info("DCGM service running, but consecutive failures exceeded. DCGM metric gathering shut off"); 
+        }
       }
 
       auto elapsed = duration_cast<milliseconds>(system_clock::now() - start);

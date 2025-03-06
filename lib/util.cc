@@ -240,4 +240,11 @@ spectator::Tags parse_tags(const char* s) {
   return tags;
 }
 
+bool IsServiceRunning(const char* serviceName)
+{
+  std::string command = std::string(UtilConstants::ServiceActiveCmd) + " " + std::string(serviceName);
+  int returnCode = system(command.c_str());
+  return returnCode == 0;
+}
+
 }  // namespace atlasagent

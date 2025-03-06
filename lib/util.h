@@ -7,6 +7,11 @@
 #include "files.h"
 #include "spectator/id.h"
 
+struct UtilConstants
+{
+  static constexpr auto ServiceActiveCmd {"systemctl is-active --quiet"};
+};
+
 namespace atlasagent {
 
 StdIoFile open_file(const std::string& prefix, const char* name);
@@ -44,5 +49,7 @@ inline spectator::IdPtr id_for(const char* name, const char* iface, const char* 
   }
   return spectator::Id::of(name, tags);
 }
+
+bool IsServiceRunning(const char* serviceName);
 
 }  // namespace atlasagent
