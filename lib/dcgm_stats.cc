@@ -40,13 +40,15 @@ bool parse_lines(const std::vector<std::string>& lines,
   return false;
 }
 
-inline std::vector<std::string> execute_dcgmi() try {
+inline std::optional<std::vector<std::string>> execute_dcgmi() try {
   static const auto command =
       std::string(DCGMConstants::dcgmiPath) + " " + std::string(DCGMConstants::dcgmiArgs);
-  return atlasagent::read_output_lines(command.data(), 5000);
+  
+  auto result = atlasagent::read_output_lines(command.data(), 5000);
+  return result;
 } catch (const std::exception& e) {
   atlasagent::Logger()->error("Exception thrown in ExecuteDCGMI: {}", e.what());
-  return std::vector<std::string>();
+  return std::nullopt;
 }
 
 template <class Reg>
@@ -105,10 +107,14 @@ bool GpuMetricsDCGM<Reg>::gather_metrics() {
   Logger()->debug("Attempting to gather DCGM metrics");
 
   auto lines = execute_dcgmi();
+  if (lines.has_value() == false){
+    Logger()->error("Error executing child pid");
+    return false;
+  }
 
   std::map<int, std::vector<double>> dataMap;
 
-  if (false == parse_lines(lines, dataMap)) {
+  if (false == parse_lines(lines.value(), dataMap)) {
     Logger()->error("Failure to parse DCGMI output");
     return false;
   }

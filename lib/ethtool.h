@@ -21,12 +21,18 @@ class Ethtool {
     if (can_execute("ethtool")) {
       if (interfaces_.empty()) {
         auto ip_links = read_output_lines("ip link show");
-        interfaces_ = enumerate_interfaces(ip_links);
+        if (ip_links.has_value() == false){
+          return;
+        }
+        interfaces_ = enumerate_interfaces(ip_links.value());
       }
 
       for (auto iface : interfaces_) {
         auto nic_stats = read_output_lines(fmt::format("ethtool -S {}", iface).c_str());
-        ethtool_stats(nic_stats, iface.c_str());
+        if (nic_stats.has_value() == false){
+          return;
+        }
+        ethtool_stats(nic_stats.value(), iface.c_str());
       }
     }
   }

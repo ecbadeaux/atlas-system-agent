@@ -27,10 +27,10 @@ void parse_kv_from_file(const std::string& prefix, const char* fn,
 bool starts_with(const char* line, const char* prefix) noexcept;
 
 // Execute cmd using the shell, and return its output as a string
-std::string read_output_string(const char* cmd, int timeout_millis = 1000);
+std::optional<std::string> read_output_string(const char* cmd, int timeout_millis = 1000);
 
 // Execute cmd using the shell and return its output as a vector of lines
-std::vector<std::string> read_output_lines(const char* cmd, int timeout_millis = 1000);
+std::optional<std::vector<std::string>> read_output_lines(const char* cmd, int timeout_millis = 1000);
 
 // determine whether the program passed is available
 bool can_execute(const std::string& program);

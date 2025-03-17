@@ -26,7 +26,10 @@ class Ntp {
     if (can_execute("chronyc")) {
       auto tracking_csv = read_output_string("chronyc -c tracking");
       auto sources_csv = read_output_lines("chronyc -c sources");
-      chrony_stats(tracking_csv, sources_csv);
+      if (sources_csv.has_value() == false){
+        return;
+      }
+      chrony_stats(tracking_csv.value(), sources_csv.value());
     }
 
     struct timex time {};

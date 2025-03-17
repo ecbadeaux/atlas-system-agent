@@ -3,6 +3,7 @@
 #include "absl/strings/str_split.h"
 #include <cinttypes>
 #include <filesystem>
+#include <optional>
 #include <sstream>
 #include <unistd.h>
 #include <signal.h>
@@ -135,14 +136,14 @@ static read_result_t read_with_timeout(int fd, int timeout_millis, std::string* 
   }
 }
 
-std::string read_output_string(const char* cmd, int timeout_millis) {
-  std::string result;
+std::optional<std::string> read_output_string(const char* cmd, int timeout_millis) {
+  std::string result{};
 
   int pipe_descriptors[2];
   char* argp[] = {const_cast<char*>("sh"), const_cast<char*>("-c"), nullptr, nullptr};
   if (pipe(pipe_descriptors) < 0) {
     Logger()->warn("Unable to create a pipe: {}", strerror(errno));
-    return "";
+    return std::nullopt;
   }
 
   int pid = fork();
@@ -151,7 +152,7 @@ std::string read_output_string(const char* cmd, int timeout_millis) {
       close(pipe_descriptors[0]);
       close(pipe_descriptors[1]);
       Logger()->warn("Unable to fork when trying to read output for {}: {}", cmd, strerror(errno));
-      return "";
+      return std::nullopt;
     case 0:  // child
       // close child's input
       close(pipe_descriptors[0]);
@@ -185,17 +186,31 @@ std::string read_output_string(const char* cmd, int timeout_millis) {
   }
 
   int wait_pid = 0;
+  int pstat;
   do {
-    int pstat;
     wait_pid = waitpid(pid, &pstat, 0);
   } while (wait_pid == -1 && errno == EINTR);
+
+  // Check if the child exited normally and with a status code of 0 (success)
+  if (WIFEXITED(pstat) == false){
+    return std::nullopt;
+  }
+
+  int exit_code = WEXITSTATUS(pstat);  // Get the exit code (0 if successful)
+  if (exit_code != 0){
+    return std::nullopt;
+  }
 
   return result;
 }
 
-std::vector<std::string> read_output_lines(const char* cmd, int timeout_millis) {
+std::optional<std::vector<std::string>> read_output_lines(const char* cmd, int timeout_millis) {
   // use read whole-string with timeout and then split for simplicity
-  return absl::StrSplit(read_output_string(cmd, timeout_millis), '\n', absl::SkipEmpty());
+  std::optional<std::string> result = read_output_string(cmd, timeout_millis);
+  if (result.has_value() == false){
+    return std::nullopt;
+  }
+  return absl::StrSplit(result.value(), '\n', absl::SkipEmpty());
 }
 
 inline bool can_execute_full_path(const std::string& program) {

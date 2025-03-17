@@ -28,33 +28,33 @@ TEST(Utils, ReadNumVectorFromFile) {
 
 TEST(Utils, ReadOutputString) {
   auto s = atlasagent::read_output_string("echo hello world");
-  EXPECT_EQ(s, "hello world\n");
+  EXPECT_EQ(s.value(), "hello world\n");
 }
 
 TEST(Utils, ReadOutputLines) {
   auto lines = atlasagent::read_output_lines("echo first line;echo second line;echo third line");
   std::vector<std::string> expected = {"first line", "second line", "third line"};
-  EXPECT_EQ(lines, expected);
+  EXPECT_EQ(lines.value(), expected);
 }
 
 TEST(Utils, ReadOutputTimeoutNoInput) {
   auto lines = atlasagent::read_output_lines("sleep 4; echo hi", 10);
-  EXPECT_TRUE(lines.empty());
+  EXPECT_TRUE(lines.has_value() == false);
 }
 
 TEST(Utils, ReadOutputTimeoutAfterInput) {
   auto lines = atlasagent::read_output_lines("echo foo; sleep 1; echo bar", 10);
-  EXPECT_TRUE(lines.empty());
+  EXPECT_TRUE(lines.has_value() == false);
 }
 
 TEST(Utils, ReadOutputStringErr) {
   auto s = atlasagent::read_output_string("/bin/does-not-exist");
-  EXPECT_TRUE(s.empty());
+  EXPECT_TRUE(s.has_value() == false);
 }
 
 TEST(Utils, ReadOutputLinesErr) {
   auto v = atlasagent::read_output_string("/bin/does-not-exist");
-  EXPECT_TRUE(v.empty());
+  EXPECT_TRUE(v.has_value() == false);
 }
 
 TEST(Utils, CanExecute) {
