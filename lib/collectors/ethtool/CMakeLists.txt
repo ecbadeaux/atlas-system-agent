@@ -1,13 +1,13 @@
-add_library(ethtool INTERFACE
+add_library(ethtool
     src/ethtool.h
+    src/ethtool.cpp
 )
 
 target_include_directories(ethtool
-    INTERFACE ${CMAKE_SOURCE_DIR}
+    PUBLIC ${CMAKE_SOURCE_DIR}
 )
 
 target_link_libraries(ethtool
-    INTERFACE
     abseil::abseil
     fmt::fmt
     measurement_utils
