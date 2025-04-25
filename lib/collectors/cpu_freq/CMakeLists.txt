@@ -1,13 +1,13 @@
-add_library(cpufreq INTERFACE
+add_library(cpufreq
     src/cpufreq.h
+    src/cpufreq.cpp
 )
 
 target_include_directories(cpufreq
-    INTERFACE ${CMAKE_SOURCE_DIR}
+    PUBLIC ${CMAKE_SOURCE_DIR}
 )
 
 target_link_libraries(cpufreq
-    INTERFACE
     fmt::fmt
     tagging
 )
