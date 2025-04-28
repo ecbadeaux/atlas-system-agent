@@ -1,13 +1,13 @@
-add_library(ntp INTERFACE
+add_library(ntp 
     src/ntp.h
+    src/ntp.cpp
 )
 
 target_include_directories(ntp
-    INTERFACE ${CMAKE_SOURCE_DIR}
+    PUBLIC ${CMAKE_SOURCE_DIR}
 )
 
 target_link_libraries(ntp
-    INTERFACE
     abseil::abseil
     fmt::fmt
     tagging
