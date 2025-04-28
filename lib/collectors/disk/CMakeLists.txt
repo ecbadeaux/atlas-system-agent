@@ -12,6 +12,7 @@ target_link_libraries(disk
     fmt::fmt
     abseil::abseil
     spectator
+    monotonic_timer
     tagging
 )
 
